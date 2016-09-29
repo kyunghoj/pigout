@@ -1,0 +1,58 @@
+#! /bin/bash -x 
+
+src_dir=$1
+user_at_host=$2  # username@destination namenode's hostname
+dest_dir=$3  # destination path in HDFS
+hadoop_cmd_path=$4 # where's hadoop?
+
+username=`whoami`
+echo ">> Source Dataset Dir: $src_dir" # hdfs
+echo ">> Destination username@hostname: $user_at_host"
+echo ">> Destination directory: $dest_dir"
+echo ">> Hadoop CMD Path: $hadoop_cmd_path"
+
+staging_dir=/local1/${username}/tmp
+staged_dir=$staging_dir/`basename $src_dir`
+
+# export from HDFS to local filesystem
+mkdir -p ${staged_dir}
+#chown -R kyunghoj:cse-hdop ${staged_dir}
+
+${hadoop_cmd_path} dfs -copyToLocal ${src_dir} ${staging_dir}/
+#${hadoop_cmd_path} dfs -cat ${src_dir}/part* ${staging_dir}/part-all
+
+tar -cf ${staging_dir}/tmp.tar -C ${staged_dir}/ .
+
+# Prepare a local temp directory at the destination
+#ssh ${user_at_host} -i ~ubuntu/sc296-west.pem   \
+ssh ${user_at_host}  \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    "mkdir -p ${staged_dir}"
+
+scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    ${staging_dir}/tmp.tar ${user_at_host}:${staged_dir}
+
+ssh ${user_at_host}  \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    "tar -xf ${staged_dir}/tmp.tar -C ${staged_dir}"
+
+ssh ${user_at_host}  \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    "${hadoop_cmd_path} dfs -mkdir ${dest_dir}"
+
+ssh ${user_at_host}  \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    "${hadoop_cmd_path} dfs -put ${staged_dir}/part-* ${dest_dir}"
+
+# put off copying _SUCCESS till the end
+echo "Copying _SUCCESS flag"
+#cat $staged_dir/_SUCCESS | ssh ${user_at_host} -i ~ubuntu/sc296-west.pem -o StrictHostKeyChecking=no \
+ssh ${user_at_host} -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    "${hadoop_cmd_path} dfs -touchz ${dest_dir}/_SUCCESS"
+
+#cleanup
+echo "Deleting the staged files"
+rm -rf ${staged_dir}/*
+
+exit 0

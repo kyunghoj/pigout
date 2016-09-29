@@ -1,0 +1,77 @@
+<!-- coordinator application template for daily processing -->
+<coordinator-app 
+    name="${coord_app_name}" 
+    frequency="${coord:days(1)}"
+    start="${start}"
+    end="${end}"
+    timezone="${timezone}"
+    xmlns="uri:oozie:coordinator:0.1">
+    <datasets>
+    </datasets>
+
+    <input-events>
+    </input-events>
+    
+    <output-events>
+    </output-events>
+
+    <action>
+        <workflow>
+            <!-- path to actual workflow -->
+            <app-path>${workflow_app_path}</app-path>
+
+            <!-- and parameters for the workflow.xml -->
+            <configuration>
+                <property>
+                    <name>nameNodeIn</name>
+                    <value>${nameNodeIn}</value>
+                </property>
+                <property>
+                    <name>nameNodeOut</name>
+                    <value>${nameNodeOut}</value>
+                </property>
+                <property>
+                    <name>jobTracker</name>
+                    <value>${jobTracker}</value>
+                </property>
+                <property>
+                    <name>okTo</name>
+                    <value>${okTo}</value>
+                </property>
+                <property>
+                    <name>workflow_pig_script</name>
+                    <value>${workflow_pig_script}</value>
+                </property>
+                <property>
+                    <name>workflow_app_path</name>
+                    <value>${workflow_app_path}</value>
+                </property>
+                <property>
+                    <name>ssh_cp_script</name>
+                    <value>${ssh_cp_script}</value>
+                </property>
+                <property>
+                    <name>ssh_cp_src_dir</name>
+                    <value>${ssh_cp_src_dir}</value>
+                </property>
+                <property>
+                    <name>ssh_cp_hostname</name>
+                    <value>${ssh_cp_hostname}</value>
+                </property>
+                <property>
+                    <name>ssh_cp_dst_dir</name>
+                    <value>${ssh_cp_dst_dir}</value>
+                </property>
+                <property>
+                    <name>ssh_cp_hadoop_cmd_path</name>
+                    <value>${ssh_cp_hadoop_cmd_path}</value>
+                </property>
+                <property>
+                    <name>oozie.use.system.libpath</name>
+                    <value>true</value>
+                </property>
+
+            </configuration>
+        </workflow>
+    </action>
+</coordinator-app>

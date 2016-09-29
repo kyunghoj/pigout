@@ -1,0 +1,43 @@
+#! /bin/bash -x 
+
+src_dir=$1
+user_at_host=$2  # username@destination namenode's hostname
+dest_dir=$3  # destination path in HDFS
+hadoop_cmd_path=$4 # where's hadoop?
+
+username=`whoami`
+echo ">> Source Dataset Dir: $src_dir" # hdfs
+echo ">> Destination username@hostname: $user_at_host"
+echo ">> Destination directory: $dest_dir"
+echo ">> Hadoop CMD Path: $hadoop_cmd_path"
+
+staging_dir=/local1/${username}/tmp
+staged_dir=$staging_dir/`basename $src_dir`
+
+# export from HDFS to local filesystem
+mkdir -p ${staged_dir}
+${hadoop_cmd_path} dfs -copyToLocal ${src_dir} ${staging_dir}/
+
+# Prepare a local temp directory at the destination
+ssh ${user_at_host}   \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    "mkdir -p ${staged_dir}"
+
+# Copy over SSH channel
+echo "Copying files to ${user_at_host}:${dest_dir}/"
+
+cat ${staged_dir}/part* | ssh ${user_at_host} \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    "${hadoop_cmd_path} dfs -put - ${dest_dir}/" 
+
+# put off copying _SUCCESS till the end
+echo "Copying _SUCCESS flag"
+cat $staged_dir/_SUCCESS | ssh ${user_at_host} -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    "${hadoop_cmd_path} dfs -put - $dest_dir/_SUCCESS"
+
+#cleanup
+echo "Deleting the staged files"
+rm -rf $staged_dir
+
+exit 0

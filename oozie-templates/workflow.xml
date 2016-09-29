@@ -1,0 +1,61 @@
+<workflow-app xmlns="uri:oozie:workflow:0.2" name="${workflow_name}">
+    <start to="start_node"/>
+    <action name="start_node">
+        <pig>
+            <job-tracker>${jobTracker}</job-tracker>
+            <name-node>${nameNodeIn}</name-node>
+
+            <!-- Pre-processing. Delete or create directories --> 
+            <prepare>
+            </prepare>
+
+            <!-- configuration for Hadoop -->
+            <configuration>
+                <property>
+                    <name>mapred.job.queue.name</name>
+                    <value>default</value>
+                </property>
+                <property>
+                    <name>mapred.compress.map.output</name>
+                    <value>true</value>
+                </property>
+            </configuration>
+
+            <script>${workflow_pig_script}</script>
+        </pig>
+        <!-- decide where to go based on properties -->
+        <!-- PigOut will write either "end" or "ssh-copy" to okTo property -->
+        <ok to="${okTo}"/>
+        <error to="fail"/>
+    </action>
+    <action name="ssh_copy">
+        <shell xmlns="uri:oozie:shell-action:0.1">
+            <job-tracker>${jobTracker}</job-tracker>
+            <name-node>${nameNodeIn}</name-node>
+            <configuration>
+                <property>
+                  <name>mapred.job.queue.name</name>
+                  <value>default</value>
+                </property>
+            </configuration>
+            <exec>${ssh_cp_script}</exec> <!-- script filename -->
+
+            <argument>${ssh_cp_src_dir}</argument> <!-- src_dir -->
+            <argument>${ssh_cp_hostname}</argument> <!-- hostname -->
+            <argument>${ssh_cp_dst_dir}</argument> <!-- dest_dir -->
+            <argument>${ssh_cp_hadoop_cmd_path}</argument> <!-- hadoop_cmd_path -->
+            
+            <!--Copy the executable to compute node's current working directory -->
+            <!--Assume that ${ssh_cp_script} is in oozie.wf.application.path -->
+            <file>${ssh_cp_script}#${ssh_cp_script}</file>
+        </shell>
+        <ok to="end"/>
+        <error to="fail"/>
+    </action>
+
+    <kill name="fail">
+        <message>Workflow failed, error message[${wf:errorMessage(wf:lastErrorNode())}]</message>
+    </kill>
+
+    <end name="end"/>
+</workflow-app>

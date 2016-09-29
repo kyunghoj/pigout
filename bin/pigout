@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# 
+# The PigOut command script
+#
+# Environment Variables
+#
+#     JAVA_HOME                The java implementation to use.    Overrides JAVA_HOME.
+#
+#     PIGOUT_CLASSPATH         Extra Java CLASSPATH entries.
+#
+#     PIGOUT_USER_CLASSPATH_FIRST If set, add user provided classpath entries to
+#                              the top of classpath instead of appending them.
+#                              Default is unset, i.e. the classpath entries are
+#                              placed normally at the end of a pre-defined classpath.
+#
+#     HADOOP_HOME/HADOOP_PREFIX     Environment HADOOP_HOME/HADOOP_PREFIX(0.20.205)
+#
+#     HADOOP_CONF_DIR     Hadoop conf dir
+#
+#     PIGOUT_HEAPSIZE    The maximum amount of heap to use, in MB. 
+#                                        Default is 1000.
+#
+#     PIGOUT_OPTS            Extra Java runtime options.
+#
+#     PIGOUT_CONF_DIR    Alternate conf dir. Default is ${PIGOUT_HOME}/conf.
+
+debug=false
+
+remaining=()
+includeHCatalog="";
+addJarString=-Dpigout.additional.jars\=;
+additionalJars="";
+# filter command line parameter
+for f in "$@"; do
+     if [[ $f == "-secretDebugCmd" || $f == "-printCmdDebug" ]]; then
+        debug=true
+     else
+        remaining[${#remaining[@]}]="$f"
+     fi
+done
+
+# resolve links - $0 may be a softlink
+this="${BASH_SOURCE-$0}"
+
+# convert relative path to absolute path
+bin=$(cd -P -- "$(dirname -- "$this")">/dev/null && pwd -P)
+script="$(basename -- "$this")"
+this="$bin/$script"
+
+# the root of the Pig installation
+if [ -z "$PIGOUT_HOME" ]; then
+    export PIGOUT_HOME=`dirname "$this"`/..
+fi
+
+if [ -z "$PIGOUT_CONF_DIR" ]; then
+    if [ -f ${PIGOUT_HOME}/conf/pigout.properties ]; then
+        PIGOUT_CONF_DIR=${PIGOUT_HOME}/conf
+    fi
+fi
+
+#if [ -z "$PIGOUT_CONF_DIR" ]; then
+#    echo "Please define PIGOUT_CONF_DIR."
+#    exit
+#fi
+
+if [ -f "${PIGOUT_CONF_DIR}/pigout-env.sh" ]; then
+    . "${PIGOUT_CONF_DIR}/pigout-env.sh"
+fi
+
+# some Java parameters
+if [ "$JAVA_HOME" != "" ]; then
+    #echo "run java in $JAVA_HOME"
+    JAVA_HOME=$JAVA_HOME
+fi
+    
+if [ "$JAVA_HOME" = "" ]; then
+    echo "Error: JAVA_HOME is not set."
+    exit 1
+fi
+
+JAVA=$JAVA_HOME/bin/java
+JAVA_HEAP_MAX=-Xmx1000m 
+
+# check envvars which might override default args
+if [ "$PIGOUT_HEAPSIZE" != "" ]; then
+    JAVA_HEAP_MAX="-Xmx""$PIGOUT_HEAPSIZE""m"
+fi
+
+# CLASSPATH initially contains $PIGOUT_CONF_DIR
+CLASSPATH="${PIGOUT_CONF_DIR}"
+CLASSPATH=${CLASSPATH}:$JAVA_HOME/lib/tools.jar
+
+# Add user-specified CLASSPATH entries via PIGOUT_CLASSPATH
+# If PIGOUT_USER_CLASSPATH_FIRST is set, prepend the entries
+if [ "$PIGOUT_CLASSPATH" != "" ]; then
+  if [ "$PIGOUT_USER_CLASSPATH_FIRST" == "" ]; then
+    CLASSPATH=${CLASSPATH}:${PIGOUT_CLASSPATH}
+  else
+    CLASSPATH=${PIGOUT_CLASSPATH}:${CLASSPATH}
+  fi
+fi
+
+# add HADOOP_CONF_DIR
+if [ "$HADOOP_CONF_DIR" != "" ]; then
+    CLASSPATH=${CLASSPATH}:${HADOOP_CONF_DIR}
+fi
+
+# so that filenames w/ spaces are handled correctly in loops below
+IFS=
+
+shopt -s extglob
+shopt -s nullglob
+
+for f in $PIGOUT_HOME/lib/*.jar; do
+    CLASSPATH=${CLASSPATH}:$f;
+done
+
+JYTHON_JAR=`echo ${PIGOUT_HOME}/lib/jython*.jar`
+
+if [ -z "$JYTHON_JAR" ]; then
+    JYTHON_JAR=`echo $PIGOUT_HOME/build/ivy/lib/Pig/jython*.jar`
+    if [ -n "$JYTHON_JAR" ]; then
+        CLASSPATH=${CLASSPATH}:$JYTHON_JAR
+    fi
+fi
+
+if which hadoop >/dev/null; then
+    HADOOP_BIN=`which hadoop`
+fi
+
+if [[ -z "$HADOOP_BIN" && -n "$HADOOP_PREFIX" ]]; then
+    if [ -f $HADOOP_PREFIX/bin/hadoop ]; then
+        HADOOP_BIN=$HADOOP_PREFIX/bin/hadoop
+    fi
+fi
+
+if [[ -z "$HADOOP_BIN" && -n "$HADOOP_HOME" && -d "$HADOOP_HOME" ]]; then
+    if [ -f $HADOOP_HOME/bin/hadoop ]; then
+        HADOOP_BIN=$HADOOP_HOME/bin/hadoop
+    fi
+fi
+
+if [ -z "$HADOOP_BIN" ]; then
+    # if installed with rpm/deb package
+    if [ -f /usr/bin/hadoop ]; then
+        HADOOP_BIN=/usr/bin/hadoop
+    fi
+fi
+
+if [ -d "${PIGOUT_HOME}/etc/hadoop" ]; then
+    CLASSPATH=${CLASSPATH}:${PIGOUT_HOME}/etc/hadoop;
+fi
+
+# locate ZooKeeper
+ZKH=${ZOOKEEPER_HOME:-"${PIGOUT_HOME}/share/zookeeper"}
+if [ -d "$ZKH" ] ; then
+    for f in ${ZKH}/zookeeper-*.jar; do
+        CLASSPATH=${CLASSPATH}:$f
+    done
+fi
+
+# default log directory & file
+if [ "$PIGOUT_LOG_DIR" = "" ]; then
+    PIGOUT_LOG_DIR="$PIGOUT_HOME/logs"
+fi
+if [ "$PIGOUT_LOGFILE" = "" ]; then
+    PIGOUT_LOGFILE='pig.log'
+fi
+
+# restore ordinary behaviour
+unset IFS
+
+PIGOUT_OPTS="$PIGOUT_OPTS -Dpigout.log.dir=$PIGOUT_LOG_DIR"
+PIGOUT_OPTS="$PIGOUT_OPTS -Dpigout.log.file=$PIGOUT_LOGFILE"
+PIGOUT_OPTS="$PIGOUT_OPTS -Dpigout.home.dir=$PIGOUT_HOME"
+if [ "$includeHCatalog" == "true" ]; then
+  addJars=`echo $PIGOUT_OPTS | awk '{ for (i=1; i<=NF; i++) print $i; }' | grep "\-Dpigout.additional.jars=" | sed s/-Dpigout.additional.jars=//`
+  if [ "$addJars" != "" ]; then
+    ADDITIONAL_CLASSPATHS=$addJars:$ADDITIONAL_CLASSPATHS
+    PIGOUT_OPTS=`echo $PIGOUT_OPTS | sed 's/-Dpigout.additional.jars=[^ ]*//'`
+  fi
+  PIGOUT_OPTS="$PIGOUT_OPTS -Dpigout.additional.jars=$ADDITIONAL_CLASSPATHS"
+fi
+
+# run it
+
+PIGOUT_JAR=$PIGOUT_HOME/target/pigout-0.1-SNAPSHOT.jar
+CLASSPATH=${CLASSPATH}:$PIGOUT_JAR
+
+export HADOOP_CLASSPATH=$CLASSPATH:$HADOOP_CLASSPATH
+export HADOOP_OPTS="$JAVA_HEAP_MAX $PIGOUT_OPTS $HADOOP_OPTS"
+        
+export PIGOUT_MAIN=edu.buffalo.cse.pigout.Main
+exec "$JAVA" $JAVA_HEAP_MAX $PIGOUT_OPTS -classpath "$CLASSPATH" $PIGOUT_MAIN "${remaining[@]}"
+#mvn exec:java -Dexec.mainClass=edu.buffalo.cse.pigout.Main
+
+# changing optional sh behaviors
+# http://www.gnu.org/software/bash/manual/html_node/The-Shopt-Builtin.html
+shopt -u nullglob   
+shopt -u extglob    # extended pattern matching
