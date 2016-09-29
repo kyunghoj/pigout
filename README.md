@@ -39,3 +39,15 @@ Run
 $> bin/pigout -x local -f simple.pig
 ```
 
+Code Contributors
+---
+
+* Kyungho Jeon
+* Feng Shen
+* Sharath Chandrashekhara
+
+Advisors
+---
+
+* Prof. Oliver Kennedy
+* Prof. Steven Y. Ko
