@@ -3,12 +3,17 @@ README
 
 PigOut: Make Multiple Hadoop Clusters Work Together
 
-TODO
+TODOs
 ---
 * Add unit test code
+* Make PigOut deployable on public clouds such as Amazon Web Services and Google Cloud
+* Add flexibility:
+  * Reasonable configuration parameters: Data sources (e.g., HDFS cluster) and matching data analysis platform (e.g., Hadoop MapReduce)
+* Cleaner and more reasonable implementation
 
 Changelog
 ---
+* May 4, 2017: Add TODO items 
 * September 29, 2016: Start code clean up
 
 Build
